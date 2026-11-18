@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-24.04-arm, macos-latest, ubuntu-latest ]
+        os: [ ubuntu-24.04-arm ]
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.os }}
     steps:
@@ -34,11 +34,12 @@ jobs:
           ./gradlew -q --init-script cp.gradle printJcstressClasspath | grep '^CP=' | cut -c4- > cp.txt
           uname -m
           java -version
-      - name: Run the SingleProducerSequencer stress tests
-        run: java -cp "$(cat cp.txt)" org.openjdk.jcstress.Main -t 'SingleProducerSequencerStress' -m tough -af NONE -r build/reports/jcstress
+          java -XX:-UseLSE -XX:+PrintFlagsFinal -version | grep -w UseLSE
+      - name: Run the SingleProducerSequencer stress tests, with compare-and-set as LDAXR/STLXR instead of CASAL
+        run: java -cp "$(cat cp.txt)" org.openjdk.jcstress.Main -t 'SingleProducerSequencerStress' -m tough -af NONE -jvmArgsPrepend '-XX:-UseLSE' -r build/reports/jcstress
       - name: Archive the report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: jcstress-${{ matrix.os }}
+          name: jcstress-${{ matrix.os }}-no-lse
           path: build/reports/jcstress
