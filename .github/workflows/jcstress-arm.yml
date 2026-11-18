@@ -1,0 +1,44 @@
+name: JCStress on Arm - gating sequence barrier
+
+on:
+  push:
+    branches: [ 'pr525-arm-jcstress*' ]
+  workflow_dispatch:
+
+jobs:
+  jcstress:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-24.04-arm, macos-14, ubuntu-latest ]
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up java
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: 'zulu'
+      - name: Build the jcstress jar and print its classpath
+        run: |
+          chmod +x gradlew
+          cat > cp.gradle <<'EOF'
+          allprojects {
+              tasks.register('printJcstressClasspath') {
+                  dependsOn 'jcstressJar'
+                  doLast { println "CP=" + tasks.jcstress.classpath.asPath }
+              }
+          }
+          EOF
+          ./gradlew -q --init-script cp.gradle printJcstressClasspath | grep '^CP=' | cut -c4- > cp.txt
+          uname -m
+          java -version
+      - name: Run the SingleProducerSequencer stress tests
+        run: java -cp "$(cat cp.txt)" org.openjdk.jcstress.Main -t 'SingleProducerSequencerStress' -m tough -af NONE -r build/reports/jcstress
+      - name: Archive the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jcstress-${{ matrix.os }}
+          path: build/reports/jcstress
